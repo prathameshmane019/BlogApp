@@ -271,7 +271,7 @@ export default function BlogsPage() {
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No blogs found</h3>
                 <p className="text-gray-600 mb-4">
                   {searchTerm ? (
-                    <>No results found for "{searchTerm}". Try different keywords.</>
+                    <>No results found for &quot;{searchTerm}&quot;. Try different keywords.</>
                   ) : selectedCategory ? (
                     <>No blogs found in this category. Try selecting a different category.</>
                   ) : (
