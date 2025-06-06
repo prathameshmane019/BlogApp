@@ -1,25 +1,10 @@
 'use client';
 import { useContext, useState, useEffect } from 'react';
 import { createContext } from 'react';
-import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import { useRouter } from 'next/navigation'; 
 import api from '../services/blogApi';
 
-// Configure axios base URL
-const getAPIBaseURL = () => {
-  // For production (deployed frontend)
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return process.env.NEXT_PUBLIC_API_URL || 'https://blog-backend-five-mu.vercel.app';
-  }
-  
-  // For development (local frontend)
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-};
-
-const API_BASE_URL = getAPIBaseURL();
-
-axios.defaults.baseURL = API_BASE_URL;
-
+ 
 const AuthContext = createContext();
 
 export function useAuth() {
@@ -43,7 +28,7 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const response = await axios.get('/api/auth/verify', {
+      const response = await api.get('/api/auth/verify', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -86,7 +71,7 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     try {
-      const response = await axios.post('/api/auth/register', userData);
+      const response = await api.post('/api/auth/register', userData);
       console.log('Register response:', response.data);
       if (response.status === 201) {
         return { success: true, message: 'Registration successful' };
