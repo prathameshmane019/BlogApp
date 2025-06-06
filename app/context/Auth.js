@@ -6,7 +6,18 @@ import axios from 'axios';
 import api from '../services/blogApi';
 
 // Configure axios base URL
-const API_BASE_URL = 'http://localhost:5000';
+const getAPIBaseURL = () => {
+  // For production (deployed frontend)
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return process.env.NEXT_PUBLIC_API_URL || 'https://blog-backend-five-mu.vercel.app';
+  }
+  
+  // For development (local frontend)
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+};
+
+const API_BASE_URL = getAPIBaseURL();
+
 axios.defaults.baseURL = API_BASE_URL;
 
 const AuthContext = createContext();
