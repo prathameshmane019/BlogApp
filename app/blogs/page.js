@@ -219,9 +219,9 @@ export default function BlogsPage() {
           <div className="mb-6">
             <p className="text-gray-600">
               {searchTerm ? (
-                <>Showing {displayBlogs?.length} results for "{searchTerm}"</>
+                <>Showing {displayBlogs?.length} results for &quot;{searchTerm}&quot;</>
               ) : selectedCategory ? (
-                <>Showing blogs in "{categories?.find(c => c._id === selectedCategory)?.name || selectedCategory}"</>
+                <>Showing blogs in &quot;{categories?.find(c => c._id === selectedCategory)?.name || selectedCategory}&quot;</>
               ) : (
                 <>Showing {displayBlogs?.length} of {total} blogs</>
               )}

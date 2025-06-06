@@ -154,7 +154,7 @@ export default function Home() {
               </div>
               <h2 className="text-4xl md:text-6xl font-black text-gray-900 mb-6">Featured Stories</h2>
               <p className="text-xl text-gray-600 max-w-3xl mx-auto font-medium">
-                Hand-picked articles that showcase the best of our community's creativity and insights.
+                Hand-picked articles that showcase the best of our community&apos;s creativity and insights.
               </p>
             </div>
             
