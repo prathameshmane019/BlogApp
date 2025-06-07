@@ -213,34 +213,13 @@ export const useBlogOperations = () => {
     }
   }, [])
 
-  const uploadImage = useCallback(async (imageFile) => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const result = await blogApi.uploadImage(imageFile)
-      
-      if (!result.success) {
-        setError(result.error || 'Failed to upload image')
-      }
-      
-      return result
-    } catch (err) {
-      const errorMsg = err.message || 'An error occurred while uploading the image'
-      setError(errorMsg)
-      return { success: false, error: errorMsg }
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   return {
     createBlog,
     updateBlog,
     deleteBlog,
     toggleLike,
-    toggleBookmark,
-    uploadImage,
+    toggleBookmark, 
     loading,
     error,
     clearError
@@ -530,4 +509,7 @@ export const useUserBlogInteractions = (userId) => {
     error,
     refetch: fetchInteractions
   }
+
+  
+
 }

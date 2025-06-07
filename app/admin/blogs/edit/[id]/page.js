@@ -1,31 +1,33 @@
 'use client';
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Save, ArrowLeft, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { useMetadata } from '@/hooks/blogHooks';
-import { useBlog, useBlogOperations } from '@/hooks/blogHooks';
+import { Save, ArrowLeft, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { useMetadata, useBlog, useBlogOperations } from '@/hooks/blogHooks';
 import { toast } from 'sonner';
 
 export default function EditBlog({params}) {
   const router = useRouter();
-   const unwrappedParams = use(params);
+    const unwrappedParams = use(params);
   const { id } = unwrappedParams; 
-  // console.log('EditBlog: ID from useParams:', id); // Debug: Log the ID
-
-  const { blog, loading: blogLoading, error: blogError } = useBlog(id,'id');
-  console.log('EditBlog: useBlog state:', { blog, blogLoading, blogError }); // Debug: Log useBlog state
-
+  const { blog, loading: blogLoading, error: blogError, refetch } = useBlog(id, 'id');
   const { categories, tags, loading: metadataLoading, error: metadataError } = useMetadata();
-  // console.log('EditBlog: useMetadata state:', { categories, tags, metadataLoading, metadataError }); // Debug: Log useMetadata state
-
-  console.log("Blog Data:",blog);
-  const { updateBlog } = useBlogOperations();
-  const [formData, setFormData] = useState(null);
+  const { updateBlog, uploadImages } = useBlogOperations();
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    excerpt: '',
+    category: '',
+    tags: [],
+    status: 'draft',
+    isFeatured: false,
+    images: [],
+  });
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (blog) {
-      console.log('EditBlog: Blog data received:', blog); // Debug: Log the blog data
       setFormData({
         title: blog.title || '',
         content: blog.content || '',
@@ -33,16 +35,12 @@ export default function EditBlog({params}) {
         category: blog.category?._id || '',
         tags: blog.tags?.map((tag) => tag._id) || [],
         status: blog.status || 'draft',
-        featuredImage: blog.featuredImage || '',
         isFeatured: blog.isFeatured || false,
+        images: blog.images || [],
       });
-      console.log('EditBlog: FormData set to:', formData); // Debug: Log formData after setting
+      setImagePreviews(blog.images?.map((img) => ({ url: img.url })) || []);
     }
   }, [blog]);
-
-  useEffect(() => {
-    console.log('EditBlog: FormData updated:', formData); // Debug: Log formData changes
-  }, [formData]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -56,12 +54,89 @@ export default function EditBlog({params}) {
     }
   };
 
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    setImageFiles((prev) => [...prev, ...files]);
+    const previews = files.map((file) => ({
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setImagePreviews((prev) => [...prev, ...previews]);
+    setFormData((prev) => ({
+      ...prev,
+      images: [...prev.images, ...files.map(() => ({ altText: '', caption: '' }))],
+    }));
+  };
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    setImageFiles((prev) => [...prev, ...files]);
+    const previews = files.map((file) => ({
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setImagePreviews((prev) => [...prev, ...previews]);
+    setFormData((prev) => ({
+      ...prev,
+      images: [...prev.images, ...files.map(() => ({ altText: '', caption: '' }))],
+    }));
+  }, []);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleRemoveImage = (index) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleImageMetadataChange = (index, field, value) => {
+    setFormData((prev) => {
+      const newImages = [...prev.images];
+      newImages[index] = { ...newImages[index], [field]: value };
+      return { ...prev, images: newImages };
+    });
+  };
+
+  const handleUploadImages = async () => {
+    if (imageFiles.length === 0) return formData.images;
+
+    setSubmitting(true);
+    try {
+      const altTexts = formData.images.slice(-imageFiles.length).map((img) => img.altText || '');
+      const captions = formData.images.slice(-imageFiles.length).map((img) => img.caption || '');
+      const response = await uploadImages(imageFiles, altTexts, captions);
+      if (response.success) {
+        toast.success('Images uploaded successfully!');
+        setImageFiles([]);
+        return [...formData.images.slice(0, -imageFiles.length), ...response.data];
+      } else {
+        toast.error(response.error || 'Failed to upload images');
+        return formData.images;
+      }
+    } catch (error) {
+      toast.error('An error occurred while uploading images');
+      return formData.images;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
 
+    const uploadedImages = await handleUploadImages();
+    const updatedFormData = { ...formData, images: uploadedImages };
+
     try {
-      const response = await updateBlog(id, formData);
+      const response = await updateBlog(id, updatedFormData);
       if (response.success) {
         toast.success('Blog updated successfully!');
         router.push('/admin/blogs');
@@ -75,8 +150,7 @@ export default function EditBlog({params}) {
     }
   };
 
-  if (blogLoading || metadataLoading || !formData) {
-    console.log('EditBlog: Rendering loading state', { blogLoading, metadataLoading, formData }); // Debug: Log why loading state is active
+  if (blogLoading || metadataLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -102,7 +176,6 @@ export default function EditBlog({params}) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-2xl shadow-lg">
-        {/* Title */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
           <input
@@ -116,7 +189,6 @@ export default function EditBlog({params}) {
           />
         </div>
 
-        {/* Excerpt */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
           <textarea
@@ -130,7 +202,6 @@ export default function EditBlog({params}) {
           />
         </div>
 
-        {/* Content */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
           <textarea
@@ -138,13 +209,84 @@ export default function EditBlog({params}) {
             value={formData.content}
             onChange={handleChange}
             className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Write your blog content here..."
+            placeholder="Write your blog content here... (Use [IMAGE_X] to indicate where to place image X)"
             rows="10"
             required
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Use [IMAGE_X] in content to place images (e.g., [IMAGE_0] for first image)
+          </p>
         </div>
 
-        {/* Category */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Upload Images</label>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            className="w-full p-6 border-2 border-dashed border-gray-300 rounded-xl text-center hover:border-blue-500 transition-all duration-200"
+          >
+            <ImageIcon className="w-8 h-8 mx-auto text-gray-400" />
+            <p className="mt-2 text-sm text-gray-600">
+              Drag and drop images here or click to select
+            </p>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageChange}
+              className="hidden"
+              id="image-upload"
+            />
+            <label
+              htmlFor="image-upload"
+              className="mt-2 inline-block px-4 py-2 bg-blue-600 text-white rounded-xl cursor-pointer hover:bg-blue-700"
+            >
+              Select Images
+            </label>
+          </div>
+
+          {imagePreviews.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative p-4 border rounded-xl">
+                  <img
+                    src={preview.url}
+                    alt={`Preview ${index}`}
+                    className="w-full h-40 object-cover rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(index)}
+                    className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-700">Alt Text</label>
+                    <input
+                      type="text"
+                      value={formData.images[index]?.altText || ''}
+                      onChange={(e) => handleImageMetadataChange(index, 'altText', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      placeholder="Enter alt text"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-700">Caption</label>
+                    <input
+                      type="text"
+                      value={formData.images[index]?.caption || ''}
+                      onChange={(e) => handleImageMetadataChange(index, 'caption', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                      placeholder="Enter caption"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
           <select
@@ -162,7 +304,6 @@ export default function EditBlog({params}) {
           </select>
         </div>
 
-        {/* Tags */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
           <select
@@ -183,7 +324,6 @@ export default function EditBlog({params}) {
           </p>
         </div>
 
-        {/* Status */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select
@@ -197,23 +337,6 @@ export default function EditBlog({params}) {
           </select>
         </div>
 
-        {/* Featured Image */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
-          <div className="relative">
-            <ImageIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              name="featuredImage"
-              value={formData.featuredImage}
-              onChange={handleChange}
-              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Paste image URL (optional)"
-            />
-          </div>
-        </div>
-
-        {/* Is Featured */}
         <div className="flex items-center">
           <input
             type="checkbox"
@@ -225,7 +348,6 @@ export default function EditBlog({params}) {
           <label className="ml-2 text-sm font-medium text-gray-700">Mark as Featured</label>
         </div>
 
-        {/* Submit Button */}
         <div className="flex justify-end">
           <button
             type="submit"
@@ -237,7 +359,7 @@ export default function EditBlog({params}) {
             ) : (
               <Save className="w-5 h-5 mr-2" />
             )}
-            {submitting ? 'Updating...' : 'Update Blog'}
+            {submitting ? 'Saving...' : 'Update Blog'}
           </button>
         </div>
       </form>

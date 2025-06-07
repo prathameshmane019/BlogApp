@@ -7,9 +7,9 @@ const getAPIBaseURL = () => {
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
     return process.env.NEXT_PUBLIC_API_URL || 'https://blog-backend-five-mu.vercel.app';
   }
-  
+
   // For development (local frontend)
-  return  'http://localhost:5000';
+  return 'http://localhost:5000';
 };
 
 const API_BASE_URL = getAPIBaseURL();
@@ -56,7 +56,7 @@ export const blogApi = {
       const response = await api.get('/api/blogs', {
         params: { page, limit, category, search, sortBy, sortOrder }
       })
-      console.log("Fetched Blogs:",response.data);
+      console.log("Fetched Blogs:", response.data);
       return { success: true, data: response.data }
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Failed to fetch blogs' }
@@ -77,7 +77,7 @@ export const blogApi = {
   getBlogById: async (id) => {
     try {
       const response = await api.get(`/api/blogs/admin/${id}`)
-      console.log("Id  Blog:" ,response.data);
+      console.log("Id  Blog:", response.data);
       return { success: true, data: response.data.data }
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Failed to fetch blog' }
@@ -89,7 +89,7 @@ export const blogApi = {
     try {
       console.log("Fetchting by slug");
       const response = await api.get(`/api/blogs/${slug}`)
-      console.log("Blog in api",response.data.data);
+      console.log("Blog in api", response.data.data);
       return { success: true, data: response.data.data }
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Failed to fetch blog' }
@@ -219,20 +219,85 @@ export const blogApi = {
     }
   },
 
-  // Upload image
-  uploadImage: async (imageFile) => {
+  // FIXED: Upload images function
+  uploadImages: async (imageFiles, altTexts = [], captions = []) => {
     try {
-      const formData = new FormData()
-      formData.append('image', imageFile)
+      console.log('=== UPLOAD DEBUG START ===');
+      console.log('imageFiles:', imageFiles);
+      console.log('imageFiles length:', imageFiles.length);
+      console.log('imageFiles type:', typeof imageFiles);
+      console.log('imageFiles is array:', Array.isArray(imageFiles));
       
-      const response = await api.post('/api/upload/image', formData, {
+      // Validate input
+      if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
+        console.error('No valid image files provided');
+        return {
+          success: false,
+          error: 'No image files provided'
+        };
+      }
+
+      // Check each file
+      const validFiles = imageFiles.filter(file => file instanceof File);
+      console.log('Valid files:', validFiles.length);
+      
+      if (validFiles.length === 0) {
+        console.error('No valid File objects found');
+        return {
+          success: false,
+          error: 'No valid files to upload'
+        };
+      }
+
+      // Create FormData
+      const formData = new FormData();
+
+      // Append each image file
+      validFiles.forEach((file, index) => {
+        console.log(`Appending file ${index}:`, file.name, file.size, 'bytes');
+        formData.append('images', file);
+      });
+
+      // Append metadata
+      formData.append('altTexts', JSON.stringify(altTexts));
+      formData.append('captions', JSON.stringify(captions));
+
+      // Debug FormData contents
+      console.log('=== FormData contents ===');
+      for (let pair of formData.entries()) {
+        console.log(`${pair[0]}:`, pair[1]);
+        if (pair[1] instanceof File) {
+          console.log(`  File details - name: ${pair[1].name}, size: ${pair[1].size}, type: ${pair[1].type}`);
+        }
+      }
+
+      console.log('=== Making API call ===');
+      
+      // Use axios with proper multipart/form-data configuration
+      const response = await api.post('/api/blogs/upload-images', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-      })
-      return { success: true, data: response.data }
+        timeout: 30000, // 30 second timeout for large files
+      });
+
+      console.log('Upload response:', response.data);
+      
+      // Return the response data directly (axios already parses JSON)
+      return response.data;
+
     } catch (error) {
-      return { success: false, error: error.response?.data?.message || 'Failed to upload image' }
+      console.error('=== UPLOAD ERROR ===');
+      console.error('Error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error response:', error.response?.data);
+      
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Failed to upload images'
+      };
+    } finally {
+      console.log('=== UPLOAD DEBUG END ===');
     }
   },
 
@@ -260,7 +325,7 @@ export const blogApi = {
   getCategories: async () => {
     try {
       const response = await api.get('/api/categories')
-      console.log("Categories:",response.data);
+      console.log("Categories:", response.data);
       return { success: true, data: response.data.data }
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Failed to fetch categories' }
@@ -301,9 +366,10 @@ export const blogApi = {
       return { success: false, error: error.response?.data?.message || 'Failed to fetch related blogs' }
     }
   },
+
   getAnalytics: async () => {
     try {
-      const response = await axios.get('/api/analytics');
+      const response = await api.get('/api/analytics');
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.error || 'Failed to fetch analytics' };
@@ -312,7 +378,7 @@ export const blogApi = {
 
   getTrafficData: async () => {
     try {
-      const response = await axios.get('/api/analytics/traffic');
+      const response = await api.get('/api/analytics/traffic');
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.error || 'Failed to fetch traffic data' };
@@ -321,7 +387,7 @@ export const blogApi = {
 
   getUsers: async () => {
     try {
-      const response = await axios.get('/api/users');
+      const response = await api.get('/api/users');
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.error || 'Failed to fetch users' };
@@ -330,23 +396,21 @@ export const blogApi = {
 
   getSettings: async () => {
     try {
-      const response = await axios.get('/api/settings');
+      const response = await api.get('/api/settings');
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.error || 'Failed to fetch settings' };
     }
   },
+
   getRecentActivity: async () => {
     try {
-      const response = await axios.get('/api/activities');
+      const response = await api.get('/api/activities');
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.error || 'Failed to fetch recent activities' };
     }
-  },
+  }
+}
 
-   
-
-   
-} 
 export default api

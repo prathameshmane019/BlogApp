@@ -1,35 +1,38 @@
-"use client"
-import { useState, useEffect, use } from 'react'
-import { useRouter } from 'next/navigation' 
-import { Calendar, User, Clock, Share2, Heart, BookOpen, Eye, ArrowLeft, ExternalLink, Copy, Check } from 'lucide-react'
-import Image from 'next/image' 
-import { useBlog, useBlogOperations } from '@/hooks/blogHooks'
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { Calendar, User, Clock, Share2, Heart, BookOpen, Eye, ArrowLeft, ExternalLink, Copy, Check } from 'lucide-react';
+import Image from 'next/image';
+import { useBlog, useBlogOperations } from '@/hooks/blogHooks';
+import DOMPurify from 'dompurify';
+import { toast } from 'sonner';
 
-export default function BlogPost({params}) { 
-  const [liked, setLiked] = useState(false)
-  const [likes, setLikes] = useState(0)
-  const [readTime, setReadTime] = useState(0)
-  const [views, setViews] = useState(0)
-  const [copied, setCopied] = useState(false)
-  const [isScrolled, setIsScrolled] = useState(false)
+export default function BlogPost() {
+  const [liked, setLiked] = useState(false);
+  const [likes, setLikes] = useState(0);
+  const [readTime, setReadTime] = useState(0);
+  const [views, setViews] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const router = useRouter();
-  const unwrappedParams = use(params);
-  const { slug } = unwrappedParams; 
-  const { blog, loading, error, refetch } = useBlog(slug, 'slug')
-  const { toggleLike, loading: operationLoading } = useBlogOperations()
+  const { slug } = useParams();
+  const { blog, loading, error, refetch } = useBlog(slug, 'slug');
+  const { toggleLike, loading: operationLoading } = useBlogOperations();
 
   // Scroll effect for header
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+      setIsScrolled(window.scrollY > 100);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
+  // Initialize blog data
   useEffect(() => {
-    if (blog && blog.content) {
+    if (blog) {
+      console.log('Blog Data:', blog); // Debug log
       setLikes(blog.likesCount || 0);
       setViews(blog.viewsCount || 0);
       setLiked(blog.isLiked || false);
@@ -40,46 +43,58 @@ export default function BlogPost({params}) {
   const calculateReadTime = (content) => {
     if (!content) return;
     const wordsPerMinute = 200;
-    const words = content.replace(/<[^>]*>/g, '').split(' ').length;
+    const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
     const time = Math.ceil(words / wordsPerMinute);
     setReadTime(time);
   };
 
   const handleLike = async () => {
+    if (!blog?._id) {
+      toast.error('Blog ID not available');
+      return;
+    }
     try {
-      const response = await fetch(`/api/blogs/${blog?._id}/like`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (response.ok) {
-        setLiked(!liked)
-        setLikes(likes + (liked ? -1 : 1))
+      const response = await toggleLike(blog._id);
+      console.log('Toggle Like Response:', response); // Debug log
+      if (response.success) {
+        setLiked(!liked);
+        setLikes(likes + (liked ? -1 : 1));
+        toast.success(liked ? 'Blog unliked' : 'Blog liked');
+      } else {
+        toast.error(response.error || 'Failed to toggle like');
       }
     } catch (error) {
-      console.error('Failed to like blog:', error)
+      console.error('Failed to toggle like:', error);
+      toast.error('An error occurred while liking the blog');
     }
-  }
+  };
 
   const handleShare = async () => {
+    const shareData = {
+      title: blog?.title || 'Blog Post',
+      text: blog?.excerpt || 'Check out this blog post!',
+      url: window.location.href,
+    };
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: blog.title,
-          text: blog.excerpt,
-          url: window.location.href
-        })
+        await navigator.share(shareData);
+        toast.success('Blog shared successfully');
       } catch (error) {
-        console.error('Error sharing:', error)
+        console.error('Error sharing:', error);
+        toast.error('Failed to share blog');
       }
     } else {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        toast.success('Link copied to clipboard');
+        setTimeout(() => setCopied(false), 2000);
+      } catch (error) {
+        console.error('Error copying link:', error);
+        toast.error('Failed to copy link');
+      }
     }
-  }
+  };
 
   // Safe data extraction helpers
   const getAuthorInfo = (author) => {
@@ -88,46 +103,69 @@ export default function BlogPost({params}) {
         name: author.name || author.username || 'Anonymous',
         email: author.email || '',
         bio: author.bio || author.description || '',
-        avatar: author.avatar || author.profileImage || ''
-      }
+        avatar: author.avatar || author.profileImage || '',
+      };
     }
     return {
       name: typeof author === 'string' ? author : 'Anonymous',
       email: '',
       bio: '',
-      avatar: ''
-    }
-  }
+      avatar: '',
+    };
+  };
 
   const getCategoryInfo = (category) => {
     if (typeof category === 'object' && category !== null) {
       return {
         name: category.name || 'Uncategorized',
         slug: category.slug || '',
-        color: category.color || 'violet'
-      }
+        color: category.color || 'violet',
+      };
     }
     return {
       name: typeof category === 'string' ? category : 'Uncategorized',
       slug: '',
-      color: 'violet'
-    }
-  }
+      color: 'violet',
+    };
+  };
 
   const getTagInfo = (tag) => {
     if (typeof tag === 'object' && tag !== null) {
       return {
         name: tag.name || '',
         slug: tag.slug || '',
-        _id: tag._id || Math.random().toString()
-      }
+        _id: tag._id || Math.random().toString(36).substring(2),
+      };
     }
     return {
       name: typeof tag === 'string' ? tag : '',
       slug: '',
-      _id: Math.random().toString()
-    }
-  }
+      _id: Math.random().toString(36).substring(2),
+    };
+  };
+
+  // Process content with image placeholders
+  const processContentWithImages = (content, images = []) => {
+    if (!content) return '';
+    let processedContent = content;
+
+    images.forEach((image, index) => {
+      const placeholder = `[IMAGE_${index}]`;
+      if (image?.url) {
+        const imgTag = `
+          <figure class="my-8">
+            <img src="${image.url}" alt="${image.altText || `Image ${index + 1}`}" class="w-full h-auto rounded-2xl shadow-lg object-cover max-h-96" />
+            ${image.caption ? `<figcaption class="mt-2 text-center text-sm text-slate-600">${DOMPurify.sanitize(image.caption)}</figcaption>` : ''}
+          </figure>
+        `;
+        processedContent = processedContent.replace(placeholder, imgTag);
+      } else {
+        processedContent = processedContent.replace(placeholder, '');
+      }
+    });
+
+    return DOMPurify.sanitize(processedContent, { USE_PROFILES: { html: true } });
+  };
 
   if (loading) {
     return (
@@ -142,13 +180,13 @@ export default function BlogPost({params}) {
             <div className="h-80 bg-gradient-to-r from-slate-200 to-slate-300 rounded-3xl"></div>
             <div className="space-y-3">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-4 bg-gradient-to-r from-slate-200 to-slate-300 rounded-full" ></div>
+                <div key={i} className="h-4 bg-gradient-to-r from-slate-200 to-slate-300 rounded-full"></div>
               ))}
             </div>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (error || !blog) {
@@ -159,8 +197,8 @@ export default function BlogPost({params}) {
             <ExternalLink className="w-10 h-10 text-red-500" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-4">Blog Post Not Found</h1>
-          <p className="text-slate-600 mb-8">The blog post you&apos;re looking for doesn&apos;t exist or has been moved.</p>
-          <button 
+          <p className="text-slate-600 mb-8">The blog post you're looking for doesn't exist or has been moved.</p>
+          <button
             onClick={() => router.back()}
             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl hover:from-violet-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
@@ -169,18 +207,23 @@ export default function BlogPost({params}) {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
-  const authorInfo = getAuthorInfo(blog.author)
-  const categoryInfo = getCategoryInfo(blog.category)
+  const authorInfo = getAuthorInfo(blog.author);
+  const categoryInfo = getCategoryInfo(blog.category);
+  const processedContent = processContentWithImages(blog.content, blog.images);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       {/* Floating Header */}
-      <div className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200 shadow-lg' : 'bg-transparent'}`}>
+      <div
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          isScrolled ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200 shadow-lg' : 'bg-transparent'
+        }`}
+      >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <button 
+          <button
             onClick={() => router.back()}
             className="flex items-center space-x-2 text-slate-600 hover:text-slate-900 transition-colors"
           >
@@ -191,6 +234,7 @@ export default function BlogPost({params}) {
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleLike}
+                disabled={operationLoading}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-all duration-200 ${
                   liked
                     ? 'bg-red-100 text-red-600 shadow-md'
@@ -226,11 +270,13 @@ export default function BlogPost({params}) {
           <div className="flex flex-wrap items-center gap-6 text-sm text-slate-600 mb-8">
             <div className="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-3 py-2 rounded-full border border-slate-200">
               <Calendar className="w-4 h-4 text-violet-500" />
-              <span>{new Date(blog.createdAt).toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}</span>
+              <span>
+                {new Date(blog.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
             </div>
             <div className="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-3 py-2 rounded-full border border-slate-200">
               <User className="w-4 h-4 text-violet-500" />
@@ -286,7 +332,7 @@ export default function BlogPost({params}) {
             {/* Tags */}
             <div className="flex flex-wrap gap-2">
               {blog.tags?.slice(0, 3).map((tag) => {
-                const tagInfo = getTagInfo(tag)
+                const tagInfo = getTagInfo(tag);
                 return (
                   <span
                     key={tagInfo._id}
@@ -294,7 +340,7 @@ export default function BlogPost({params}) {
                   >
                     #{tagInfo.name}
                   </span>
-                )
+                );
               })}
               {blog.tags?.length > 3 && (
                 <span className="px-4 py-2 bg-slate-100 text-slate-600 text-sm rounded-full font-medium">
@@ -305,24 +351,11 @@ export default function BlogPost({params}) {
           </div>
         </header>
 
-        {/* Featured Image */}
-        {blog.image && (
-          <div className="relative h-80 md:h-96 rounded-3xl overflow-hidden mb-12 shadow-2xl">
-            <Image
-              src={blog.image}
-              alt={blog.title}
-              fill
-              className="object-cover hover:scale-105 transition-transform duration-700"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-          </div>
-        )}
-
         {/* Content */}
         <div className="prose prose-lg prose-slate max-w-none mb-16">
           <div
-            dangerouslySetInnerHTML={{ __html: blog.content }}
-            className="text-slate-800 leading-relaxed [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-12 [&>h1]:mb-6 [&>h1]:text-slate-900 [&>h2]:text-2xl [&>h2]:font-semibold [&>h2]:mt-10 [&>h2]:mb-4 [&>h2]:text-slate-800 [&>h3]:text-xl [&>h3]:font-medium [&>h3]:mt-8 [&>h3]:mb-3 [&>h3]:text-slate-700 [&>p]:mb-6 [&>p]:text-lg [&>p]:leading-8 [&>blockquote]:border-l-4 [&>blockquote]:border-violet-500 [&>blockquote]:pl-6 [&>blockquote]:italic [&>blockquote]:text-slate-600 [&>blockquote]:bg-violet-50 [&>blockquote]:py-4 [&>blockquote]:rounded-r-lg [&>ul]:space-y-2 [&>ol]:space-y-2 [&>li]:text-lg"
+            dangerouslySetInnerHTML={{ __html: processedContent }}
+            className="text-slate-800 leading-relaxed [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-12 [&>h1]:mb-6 [&>h1]:text-slate-900 [&>h2]:text-2xl [&>h2]:font-semibold [&>h2]:mt-10 [&>h2]:mb-4 [&>h2]:text-slate-800 [&>h3]:text-xl [&>h3]:font-medium [&>h3]:mt-8 [&>h3]:mb-3 [&>h3]:text-slate-700 [&>p]:mb-6 [&>p]:text-lg [&>p]:leading-8 [&>blockquote]:border-l-4 [&>blockquote]:border-violet-500 [&>blockquote]:pl-6 [&>blockquote]:italic [&>blockquote]:text-slate-600 [&>blockquote]:bg-violet-50 [&>blockquote]:py-4 [&>blockquote]:rounded-r-lg [&>ul]:space-y-2 [&>ol]:space-y-2 [&>li]:text-lg [&>figure>img]:w-full [&>figure>img]:h-auto [&>figure>figcaption]:text-center [&>figure>figcaption]:text-sm [&>figure>figcaption]:text-slate-600 [&>figure>figcaption]:mt-2"
           />
         </div>
 
@@ -350,7 +383,7 @@ export default function BlogPost({params}) {
             <div className="flex-1">
               <h3 className="text-2xl font-bold text-slate-900 mb-2">{authorInfo.name}</h3>
               <p className="text-slate-600 leading-relaxed">
-                {authorInfo.bio || "Passionate writer and content creator sharing insights and stories with the world."}
+                {authorInfo.bio || 'Passionate writer and content creator sharing insights and stories with the world.'}
               </p>
               {authorInfo.email && (
                 <p className="text-sm text-violet-600 mt-2 font-medium">{authorInfo.email}</p>
@@ -371,5 +404,5 @@ export default function BlogPost({params}) {
         </div>
       </article>
     </div>
-  )
+  );
 }
