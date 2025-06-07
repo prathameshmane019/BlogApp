@@ -277,9 +277,9 @@ export default function BlogsPage() {
           >
             <p className="text-gray-600 text-lg">
               {searchTerm ? (
-                <>Showing {displayBlogs.length} results for "{searchTerm}"</>
+                <>Showing {displayBlogs.length} results for &quot;{searchTerm}&quot;</>
               ) : selectedCategory ? (
-                <>Showing blogs in "{categories.find((c) => c._id === selectedCategory)?.name || 'Selected Category'}"</>
+                <>Showing blogs in &quot;{categories.find((c) => c._id === selectedCategory)?.name || 'Selected Category'}&quot;</>
               ) : (
                 <>Showing {displayBlogs.length} blogs</>
               )}
@@ -339,7 +339,7 @@ export default function BlogsPage() {
                   <h3 className="text-2xl font-semibold text-gray-900 mb-4">No Blogs Found</h3>
                   <p className="text-gray-600 mb-6 text-lg">
                     {searchTerm ? (
-                      <>No results found for "{searchTerm}". Try different keywords.</>
+                      <>No results found for &quot;{searchTerm}&quot;. Try different keywords.</>
                     ) : selectedCategory ? (
                       <>No blogs found in this category. Try selecting a different category.</>
                     ) : (
