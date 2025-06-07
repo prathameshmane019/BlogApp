@@ -197,7 +197,7 @@ export default function BlogPost() {
             <ExternalLink className="w-10 h-10 text-red-500" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-4">Blog Post Not Found</h1>
-          <p className="text-slate-600 mb-8">The blog post you're looking for doesn't exist or has been moved.</p>
+          <p className="text-slate-600 mb-8">The blog post you&apos;re looking for doesn&apos;t exist or has been moved.</p>
           <button
             onClick={() => router.back()}
             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl hover:from-violet-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"

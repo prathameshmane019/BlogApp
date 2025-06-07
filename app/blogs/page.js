@@ -1,381 +1,384 @@
-'use client'
-// pages/blogs/index.js
-import { useState, useEffect } from 'react' 
-import BlogCard from '../../components/BlogCard'
-import { Search, Filter, Grid, List } from 'lucide-react'
-import { useBlogs, useSearch, useMetadata} from '@/hooks/blogHooks'
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import BlogCard from '../../components/BlogCard';
+import { Search, Grid, List, X, Loader2 } from 'lucide-react';
+import { useBlogs, useSearch, useMetadata } from '@/hooks/blogHooks';
+import { toast } from 'sonner';
+import debounce from 'lodash.debounce';
 
 export default function BlogsPage() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
-  const [viewMode, setViewMode] = useState('grid')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [sortBy, setSortBy] = useState('createdAt')
-  const [sortOrder, setSortOrder] = useState('desc')
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Use custom hooks
-  const { 
-    blogs, 
-    loading, 
-    error, 
-    totalPages,
-    total,
-    refetch 
-  } = useBlogs({
-    page: currentPage,
+  const { blogs, loading, error, hasMore, refetch, loadMore } = useBlogs({
+    page: 1,
     limit: 9,
     category: selectedCategory,
     search: searchTerm,
     sortBy,
-    sortOrder
-  })
+    sortOrder,
+  });
 
-  const { categories, loading: categoriesLoading } = useMetadata()
-  const { results: searchResults, search, clearResults } = useSearch()
+  const { categories, loading: categoriesLoading } = useMetadata();
+  const { results: searchResults, search, clearResults } = useSearch();
+  const observerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-  // Effect to refetch blogs when filters change
-  useEffect(() => {
-    refetch({
-      page: currentPage,
-      limit: 9,
-      category: selectedCategory,
-      search: searchTerm,
-      sortBy,
-      sortOrder
-    })
-  }, [currentPage, selectedCategory, searchTerm, sortBy, sortOrder])
+  // Debounced search handler
+  const debouncedSearch = debounce((value) => {
+    setSearchTerm(value);
+    console.log('Search Term Updated:', value); // Debug log
+  }, 500);
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    setCurrentPage(1)
-    // The useEffect will handle the refetch
-  }
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    debouncedSearch(value);
+  };
 
-  const handleCategoryChange = (category) => {
-    setSelectedCategory(category)
-    setCurrentPage(1)
-    setSearchTerm('') // Clear search when changing category
-    clearResults()
-  }
+  // Handle category selection
+  const handleCategoryChange = (categoryId) => {
+    const newCategory = selectedCategory === categoryId ? '' : categoryId;
+    setSelectedCategory(newCategory);
+    setSearchTerm('');
+    clearResults();
+    console.log('Selected Category:', newCategory); // Debug log
+    refetch({ page: 1, category: newCategory, search: '' });
+    toast.success(newCategory ? `Filtered by ${categories.find((c) => c._id === newCategory)?.name}` : 'All categories selected');
+  };
 
+  // Handle sort change
   const handleSortChange = (newSortBy, newSortOrder = 'desc') => {
-    setSortBy(newSortBy)
-    setSortOrder(newSortOrder)
-    setCurrentPage(1)
-  }
+    setSortBy(newSortBy);
+    setSortOrder(newSortOrder);
+    console.log('Sort Changed:', { newSortBy, newSortOrder }); // Debug log
+    refetch({ page: 1, sortBy: newSortBy, sortOrder: newSortOrder });
+  };
 
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage)
-    // Scroll to top when changing pages
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  // Clear all filters
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('');
+    setSortBy('createdAt');
+    setSortOrder('desc');
+    clearResults();
+    if (searchInputRef.current) searchInputRef.current.value = '';
+    console.log('Filters Cleared'); // Debug log
+    refetch({ page: 1, category: '', search: '', sortBy: 'createdAt', sortOrder: 'desc' });
+    toast.success('Filters cleared');
+  };
 
-  const displayBlogs = searchTerm && searchResults?.length > 0 ? searchResults : blogs
+  // Infinite scroll observer
+  useEffect(() => {
+    if (loading || !hasMore || isLoadingMore) return;
 
-  return ( 
-    <div className="min-h-screen bg-gray-50">
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsLoadingMore(true);
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerRef.current) observer.observe(observerRef.current);
+
+    return () => observer.disconnect();
+  }, [loading, hasMore, loadMore, isLoadingMore]);
+
+  useEffect(() => {
+    setIsLoadingMore(false);
+  }, [blogs]);
+
+  const displayBlogs = searchTerm && searchResults?.length > 0 ? searchResults : blogs;
+
+  console.log('Display Blogs:', displayBlogs); // Debug log
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Explore Our Blog Collection
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-10"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">
+            Discover Our Blog Universe
           </h1>
-          <p className="text-gray-600">
-            Discover insights, stories, and ideas from our community of writers.
+          <p className="text-lg text-gray-600 max-w-2xl">
+            Dive into a world of insights, stories, and ideas crafted by our passionate community.
           </p>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search and Filters */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between mb-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Filters Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-xl p-6 mb-12 border border-gray-100"
+        >
+          <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between mb-6">
             {/* Search */}
-            <form onSubmit={handleSearch} className="flex-1 max-w-md">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search blogs..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                />
-              </div>
-            </form>
-
-            {/* Category Filter */}
-            <select
-              value={selectedCategory}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              disabled={categoriesLoading}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50"
-            >
-              <option value="">All Categories</option>
-              {categories && categories.map((category) => (
-                <option key={category._id} value={category._id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative flex-1 max-w-md w-full">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search blogs..."
+                onChange={handleSearchChange}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all duration-300 text-gray-900 placeholder-gray-400"
+                aria-label="Search blogs"
+              />
+            </div>
 
             {/* View Toggle */}
-            <div className="flex items-center space-x-2 bg-gray-100 rounded-xl p-1">
+            <div className="flex items-center space-x-2 bg-gray-100 rounded-full p-1">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'grid' ? 'bg-white shadow-sm text-violet-600' : 'text-gray-600'
+                className={`p-2 rounded-full transition-all duration-200 ${
+                  viewMode === 'grid' ? 'bg-violet-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'
                 }`}
                 title="Grid View"
+                aria-label="Switch to grid view"
+                aria-pressed={viewMode === 'grid'}
               >
                 <Grid className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'list' ? 'bg-white shadow-sm text-violet-600' : 'text-gray-600'
+                className={`p-2 rounded-full transition-all duration-200 ${
+                  viewMode === 'list' ? 'bg-violet-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'
                 }`}
                 title="List View"
+                aria-label="Switch to list view"
+                aria-pressed={viewMode === 'list'}
               >
                 <List className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Sort Options */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-sm font-medium text-gray-700">Sort by:</span>
-            <button
-              onClick={() => handleSortChange('createdAt', 'desc')}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                sortBy === 'createdAt' && sortOrder === 'desc'
-                  ? 'bg-violet-100 text-violet-700'
+          {/* Category Chips */}
+          <div className="flex flex-wrap gap-3 mb-6" role="group" aria-label="Category filters">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => handleCategoryChange('')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                selectedCategory === ''
+                  ? 'bg-violet-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
+              aria-label="All categories"
+              aria-pressed={selectedCategory === ''}
             >
-              Latest
-            </button>
-            <button
-              onClick={() => handleSortChange('createdAt', 'asc')}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                sortBy === 'createdAt' && sortOrder === 'asc'
-                  ? 'bg-violet-100 text-violet-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Oldest
-            </button>
-            <button
-              onClick={() => handleSortChange('likesCount', 'desc')}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                sortBy === 'likesCount'
-                  ? 'bg-violet-100 text-violet-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Most Liked
-            </button>
-            <button
-              onClick={() => handleSortChange('viewsCount', 'desc')}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                sortBy === 'viewsCount'
-                  ? 'bg-violet-100 text-violet-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Most Viewed
-            </button>
-            <button
-              onClick={() => handleSortChange('title', 'asc')}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                sortBy === 'title'
-                  ? 'bg-violet-100 text-violet-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              A-Z
-            </button>
+              All
+            </motion.button>
+            {categoriesLoading
+              ? [...Array(5)].map((_, i) => (
+                  <div key={i} className="px-4 py-2 bg-gray-200 rounded-full animate-pulse w-20"></div>
+                ))
+              : categories?.map((category) => (
+                  <motion.button
+                    key={category._id}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleCategoryChange(category._id)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                      selectedCategory === category._id
+                        ? 'bg-violet-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                    aria-label={`Filter by ${category.name}`}
+                    aria-pressed={selectedCategory === category._id}
+                  >
+                    {category.name}
+                  </motion.button>
+                ))}
           </div>
-        </div>
+
+          {/* Sort Options */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className="text-sm font-medium text-gray-700 mr-2">Sort by:</span>
+            {[
+              { label: 'Latest', sortBy: 'createdAt', sortOrder: 'desc' },
+              { label: 'Oldest', sortBy: 'createdAt', sortOrder: 'asc' },
+              { label: 'Most Liked', sortBy: 'likesCount', sortOrder: 'desc' },
+              { label: 'Most Viewed', sortBy: 'viewsCount', sortOrder: 'desc' },
+              { label: 'A-Z', sortBy: 'title', sortOrder: 'asc' },
+            ].map((option) => (
+              <motion.button
+                key={option.label}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleSortChange(option.sortBy, option.sortOrder)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  sortBy === option.sortBy && sortOrder === option.sortOrder
+                    ? 'bg-violet-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                aria-label={`Sort by ${option.label}`}
+                aria-pressed={sortBy === option.sortBy && sortOrder === option.sortOrder}
+              >
+                {option.label}
+              </motion.button>
+            ))}
+            {(searchTerm || selectedCategory || sortBy !== 'createdAt' || sortOrder !== 'desc') && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleClearFilters}
+                className="px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-all duration-200"
+                aria-label="Clear all filters"
+              >
+                <X className="w-4 h-4 inline mr-1" /> Clear All
+              </motion.button>
+            )}
+          </div>
+        </motion.div>
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-8">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-8"
+          >
             <div className="flex items-center">
               <div className="w-4 h-4 bg-red-400 rounded-full mr-3"></div>
               <p className="text-red-700">Error loading blogs: {error}</p>
-              <button 
+              <button
                 onClick={() => refetch()}
-                className="ml-auto px-3 py-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                className="ml-auto px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-all duration-200"
+                aria-label="Retry loading blogs"
               >
                 Retry
               </button>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Results Info */}
         {!loading && displayBlogs?.length > 0 && (
-          <div className="mb-6">
-            <p className="text-gray-600">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-8"
+          >
+            <p className="text-gray-600 text-lg">
               {searchTerm ? (
-                <>Showing {displayBlogs?.length} results for &quot;{searchTerm}&quot;</>
+                <>Showing {displayBlogs.length} results for "{searchTerm}"</>
               ) : selectedCategory ? (
-                <>Showing blogs in &quot;{categories?.find(c => c._id === selectedCategory)?.name || selectedCategory}&quot;</>
+                <>Showing blogs in "{categories.find((c) => c._id === selectedCategory)?.name || 'Selected Category'}"</>
               ) : (
-                <>Showing {displayBlogs?.length} of {total} blogs</>
+                <>Showing {displayBlogs.length} blogs</>
               )}
             </p>
-          </div>
+          </motion.div>
         )}
 
         {/* Blog Grid/List */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl shadow-lg overflow-hidden animate-pulse">
-                <div className="h-48 bg-gray-300" />
-                <div className="p-6">
-                  <div className="h-4 bg-gray-300 rounded mb-2" />
-                  <div className="h-6 bg-gray-300 rounded mb-3" />
-                  <div className="h-4 bg-gray-300 rounded mb-4" />
-                  <div className="flex justify-between">
-                    <div className="h-6 bg-gray-300 rounded w-20" />
-                    <div className="h-6 bg-gray-300 rounded w-16" />
+        <AnimatePresence>
+          {loading && !isLoadingMore ? (
+            <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8' : 'space-y-6'}>
+              {[...Array(6)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="bg-white rounded-3xl shadow-lg overflow-hidden"
+                >
+                  <div className="h-64 bg-gradient-to-r from-gray-200 to-gray-300 animate-pulse" />
+                  <div className="p-6 space-y-4">
+                    <div className="h-4 bg-gray-200 rounded-full w-1/3 animate-pulse" />
+                    <div className="h-6 bg-gray-200 rounded-full w-2/3 animate-pulse" />
+                    <div className="h-4 bg-gray-200 rounded-full w-full animate-pulse" />
+                    <div className="flex justify-between">
+                      <div className="h-4 bg-gray-200 rounded-full w-20 animate-pulse" />
+                      <div className="h-4 bg-gray-200 rounded-full w-16 animate-pulse" />
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className={`${
-              viewMode === 'grid' 
-                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8' 
-                : 'space-y-6'
-            }`}>
-              {displayBlogs?.map((blog) => (
-                <BlogCard 
-                  key={blog._id} 
-                  blog={blog} 
-                  viewMode={viewMode}
-                />
+                </motion.div>
               ))}
             </div>
+          ) : (
+            <>
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8' : 'space-y-6'}>
+                {displayBlogs?.map((blog, index) => (
+                  <motion.div
+                    key={blog._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                  >
+                    <BlogCard blog={blog} viewMode={viewMode} />
+                  </motion.div>
+                ))}
+              </div>
 
-            {displayBlogs?.length === 0 && !loading && (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No blogs found</h3>
-                <p className="text-gray-600 mb-4">
-                  {searchTerm ? (
-                    <>No results found for &quot;{searchTerm}&quot;. Try different keywords.</>
-                  ) : selectedCategory ? (
-                    <>No blogs found in this category. Try selecting a different category.</>
-                  ) : (
-                    <>No blogs available at the moment.</>
+              {displayBlogs?.length === 0 && !loading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-16"
+                >
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Search className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">No Blogs Found</h3>
+                  <p className="text-gray-600 mb-6 text-lg">
+                    {searchTerm ? (
+                      <>No results found for "{searchTerm}". Try different keywords.</>
+                    ) : selectedCategory ? (
+                      <>No blogs found in this category. Try selecting a different category.</>
+                    ) : (
+                      <>No blogs available at the moment.</>
+                    )}
+                  </p>
+                  {(searchTerm || selectedCategory) && (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleClearFilters}
+                      className="px-6 py-3 bg-violet-600 text-white rounded-full hover:bg-violet-700 transition-all duration-200 text-lg"
+                      aria-label="Clear all filters"
+                    >
+                      Clear Filters
+                    </motion.button>
                   )}
-                </p>
-                {(searchTerm || selectedCategory) && (
-                  <button
-                    onClick={() => {
-                      setSearchTerm('')
-                      setSelectedCategory('')
-                      clearResults()
-                    }}
-                    className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
-                  >
-                    Clear Filters
-                  </button>
-                )}
-              </div>
+                </motion.div>
+              )}
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Infinite Scroll Trigger */}
+        {hasMore && !loading && (
+          <div ref={observerRef} className="flex justify-center py-12">
+            {isLoadingMore && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center space-x-2"
+              >
+                <Loader2 className="w-6 h-6 text-violet-600 animate-spin" />
+                <span className="text-gray-600">Loading more blogs...</span>
+              </motion.div>
             )}
-
-            {/* Pagination */}
-            {totalPages > 1 && !searchTerm && (
-              <div className="flex justify-center mt-12">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                  >
-                    Previous
-                  </button>
-                  
-                  {/* Smart pagination - show limited page numbers */}
-                  {(() => {
-                    const delta = 2
-                    const range = []
-                    const rangeWithDots = []
-
-                    // Handle single page case
-                    if (totalPages === 1) {
-                      return (
-                        <button
-                          key={1}
-                          onClick={() => handlePageChange(1)}
-                          className="px-4 py-2 rounded-lg bg-violet-600 text-white"
-                        >
-                          1
-                        </button>
-                      )
-                    }
-
-                    for (let i = Math.max(2, currentPage - delta); 
-                         i <= Math.min(totalPages - 1, currentPage + delta); 
-                         i++) {
-                      range.push(i)
-                    }
-
-                    if (currentPage - delta > 2) {
-                      rangeWithDots.push(1, '...')
-                    } else {
-                      rangeWithDots.push(1)
-                    }
-
-                    rangeWithDots.push(...range)
-
-                    if (currentPage + delta < totalPages - 1) {
-                      rangeWithDots.push('...', totalPages)
-                    } else if (totalPages > 1) {
-                      rangeWithDots.push(totalPages)
-                    }
-
-                    return rangeWithDots.map((page, index) => (
-                      page === '...' ? (
-                        <span key={index} className="px-4 py-2 text-gray-500">...</span>
-                      ) : (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`px-4 py-2 rounded-lg transition-colors ${
-                            currentPage === page
-                              ? 'bg-violet-600 text-white'
-                              : 'border border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      )
-                    ))
-                  })()}
-                  
-                  <button
-                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
-    </div> 
-  )
+    </div>
+  );
 }
